@@ -1,0 +1,17 @@
+# Data (train files are large, download from HuggingFace/Kaggle)
+data/embeddings/
+data/english/en_train.csv
+data/spanish/es_train.csv
+data/chinese/zh_train.csv
+
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# OS
+.DS_Store
