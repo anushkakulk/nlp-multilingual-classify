@@ -23,22 +23,36 @@ similar_words = model.get_nearest_neighbors('apple')
 # This will return a list of (similarity_score, word) tuples
 
 
+Reference for modifications:
+https://chriskhanhtran.github.io/posts/cnn-sentence-classification/
+
 """
+
+if torch.cuda.is_available():       
+    device = torch.device("cuda")
+    print(f'There are {torch.cuda.device_count()} GPU(s) available.')
+    print('Device name:', torch.cuda.get_device_name(0))
+
+else:
+    print('No GPU available, using the CPU instead.')
+    device = torch.device("cpu")
+
 
 class CNN(nn.Module):
     def __init__(self, dim: int = 300, num_classes: int = 3, num_filters: int = 100):
         super(CNN, self).__init__()
+        self.filter_sizes = [3, 4, 5]
         self.dim = dim # dimension of word embeddings in sentence
         self.num_filters = num_filters
         self.min_len = 5
 
         # self.conv_layer = nn.Conv2d(in_channels=1, out_channels=num_filters,  kernel_size=(5, dim), padding=2)
         self.convs = nn.ModuleList([
-            nn.Conv2d(1, num_filters, kernel_size=(h, dim)) for h in (3, 4, 5)
-        ])
+            nn.Conv1d(in_channels=self.dim, out_channels=num_filters, kernel_size=self.filter_sizes[i]) for i in range(len(self.filter_sizes))
+                              ])
         self.drop = nn.Dropout(0.5)
         # num filters * len of filters list
-        self.connected_layer = nn.Linear(in_features=num_filters * 3, out_features=num_classes) # TODO dimensions
+        self.connected_layer = nn.Linear(in_features=num_filters * len(self.filter_sizes), out_features=num_classes) # TODO dimensions
 
     def embed_sentence(self, sentence: str):
         words = sentence.split()
@@ -50,18 +64,19 @@ class CNN(nn.Module):
 
     def forward(self, sentence_batch: list[str]):
         embeddings = [self.embed_sentence(sentence) for sentence in sentence_batch]
-        padded_embeddings = torch.zeros(len(embeddings), max(e.size(0) for e in embeddings), self.dim)
+        padded_embeddings = torch.zeros(len(embeddings), max(e.size(0) for e in embeddings), self.dim).to(device)
         for idx, embed in enumerate(embeddings):
-            padded_embeddings[idx, :embed.size(0), :] = embed
+            padded_embeddings[idx, :embed.size(0), :] = embed.to(device)
 
+         # Output shape: (b, embed_dim, max_len)
+        x_reshaped = padded_embeddings.permute(0, 2, 1)
 
-        e = padded_embeddings.unsqueeze(1)
         # output is 0, 1, or 2
         conv_results = []
         for conv in self.convs:
-            x = conv(e)
+            x = conv(x_reshaped)
             x = F.relu(x)
-            x = x.squeeze(3)
+            # x = x.squeeze(3)
             y = F.max_pool1d(x, x.size(2)).squeeze(2)
             conv_results.append(y)
 
@@ -78,17 +93,22 @@ class CNN(nn.Module):
 def main():
     model = CNN()
 
+    model.to(device)
+
     loss_fn = nn.CrossEntropyLoss()
-    optimizer = optim.Adadelta(model.parameters(), lr=1.0)
+    optimizer = optim.Adadelta(model.parameters(), lr=0.1, rho=0.95)
 
     print("Training...")
-    num_epochs = 10
+    num_epochs = 15
     total = len(train)
     batch = []
     batch_labels = []
     batch_len = 32
+
+
     for epoch in range(num_epochs):
         idx = 0
+        model.train()
         for row in train.itertuples():
             # access like row.label, row.premise, row.hypothesis
             label = row.label
@@ -102,17 +122,35 @@ def main():
 
                 optimizer.zero_grad()
                 pred = model.forward(batch)
-                loss = loss_fn(pred, torch.tensor(batch_labels, dtype=torch.long))
+                loss = loss_fn(pred, torch.tensor(batch_labels, dtype=torch.long).to(device))
                 loss.backward()
                 optimizer.step()
 
                 batch = []
                 batch_labels = []
-                print(f"[{epoch}] {idx}/{total}")
+                # print(f"[{epoch}] {idx}/{total}")
                 
             idx += 1
 
+        model.eval()
+        val_total = 0
+        val_total_loss = 0.0
+        val_correct = 0
+        print(f"Validation for epoch {epoch}")
+        for row in val.itertuples():
+            # access like row.label, row.premise, row.hypothesis
+            label = row.label
+            # TODO tokenization method?
+            sentence = row.premise + " " + row.hypothesis
 
+            pred = model.evaluate(sentence)
+            loss = loss_fn(pred, torch.tensor([label]).to(device))
+            val_total_loss += loss.item()
+            pred = pred.argmax(dim=1).item()
+            val_correct += int(pred == label)
+            val_total += 1
+        print(f"Total loss {val_total_loss} accuracy {val_correct / val_total}")
+            
     print("Testing...")
     total_loss = 0.0
     num_correct = 0
@@ -120,10 +158,10 @@ def main():
     for row in test.itertuples():
         label = row.label
         # TODO tokenization method?
-        sentence = row.premise + row.hypothesis
+        sentence = row.premise + " " + row.hypothesis
 
         pred = model.evaluate(sentence)
-        loss = loss_fn(pred, torch.tensor([label]))
+        loss = loss_fn(pred, torch.tensor([label]).to(device))
         total_loss += loss.item()
         pred = pred.argmax(dim=1).item()
         num_correct += int(pred == label)
