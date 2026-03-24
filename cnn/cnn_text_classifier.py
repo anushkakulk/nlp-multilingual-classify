@@ -5,25 +5,17 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import numpy as np
+import jieba
+import re
+import argparse
+from gensim.models import KeyedVectors
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
 
 
 TRAIN_SET='en_train.csv'
-TEST_SET='en_test.csv'
-VAL_SET='en_validation.csv'
-
-ft = fasttext.load_model('cc.en.300.bin')
-train = pd.read_csv(TRAIN_SET)
-val = pd.read_csv(VAL_SET)
-test = pd.read_csv(TEST_SET)
 
 """
-word_vector = model.get_word_vector('apple')
-sentence_vector = model.get_sentence_vector('Paris is the capital of France')
-similar_words = model.get_nearest_neighbors('apple')
-# This will return a list of (similarity_score, word) tuples
-
-
-Reference for modifications:
+Reference implementation:
 https://chriskhanhtran.github.io/posts/cnn-sentence-classification/
 
 """
@@ -38,97 +30,138 @@ else:
     device = torch.device("cpu")
 
 
+def tokenize_zh(text):
+    """Strip any existing spacing, then retokenize with MicroTokenizer for uniform Chinese text."""
+    if not isinstance(text, str):
+        return text
+
+    text = re.sub(r"(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])", "", text)
+
+    text = text.replace(" ", "")
+    tokens = jieba.cut(text)
+    return " ".join(tokens)
+
+
+def tokenize(sentence: str, language: str):
+    if language == "en":
+        return sentence.strip('.').strip('!').strip('?').split(' ')
+    elif language == "es":
+        return sentence.strip('.').strip('!').strip('?').strip('¡').strip('¿').split(' ')
+    elif language == "zh":
+        return tokenize_zh(sentence)
+    else:
+        return []
+    
+
 class CNN(nn.Module):
-    def __init__(self, dim: int = 300, num_classes: int = 3, num_filters: int = 100):
+    def __init__(self, embeddings, dim: int = 300, num_classes: int = 3, num_filters: int = 100):
         super(CNN, self).__init__()
+        self.word_embeddings = embeddings
         self.filter_sizes = [3, 4, 5]
-        self.dim = dim # dimension of word embeddings in sentence
+        self.dim = dim
         self.num_filters = num_filters
         self.min_len = 5
+        self.encoded_dim = num_filters * len(self.filter_sizes)
+        self.train_language = "en"
 
-        # self.conv_layer = nn.Conv2d(in_channels=1, out_channels=num_filters,  kernel_size=(5, dim), padding=2)
         self.convs = nn.ModuleList([
             nn.Conv1d(in_channels=self.dim, out_channels=num_filters, kernel_size=self.filter_sizes[i]) for i in range(len(self.filter_sizes))
-                              ])
+        ])
         self.drop = nn.Dropout(0.5)
-        # num filters * len of filters list
-        self.connected_layer = nn.Linear(in_features=num_filters * len(self.filter_sizes), out_features=num_classes) # TODO dimensions
+        self.connected_layer = nn.Linear(in_features=self.encoded_dim * 2, out_features=num_classes)
 
-    def embed_sentence(self, sentence: str):
-        words = sentence.split()
-        embeddings = [ft.get_word_vector(w) for w in words]
+    def embed_sentence(self, sentence: str, language: str):
+        words = tokenize(sentence, language)
+        embeddings = []
+        for w in words:
+            if w in self.word_embeddings:
+                embeddings.append(self.word_embeddings[w])
+            else:
+                embeddings.append(np.zeros(self.dim, dtype=np.float32))
 
         while len(embeddings) < self.min_len:
             embeddings.append(np.zeros(self.dim, dtype=np.float32))
         return torch.tensor(np.array(embeddings))
 
-    def forward(self, sentence_batch: list[str]):
-        embeddings = [self.embed_sentence(sentence) for sentence in sentence_batch]
-        padded_embeddings = torch.zeros(len(embeddings), max(e.size(0) for e in embeddings), self.dim).to(device)
-        for idx, embed in enumerate(embeddings):
-            padded_embeddings[idx, :embed.size(0), :] = embed.to(device)
+    def forward(self, premise_batch: list[str], hypothesis_batch: list[str], language: str = "en"):
+        premise_embeds = [self.embed_sentence(premise, language=language) for premise in premise_batch]
+        hypothesis_embeds = [self.embed_sentence(hypothesis, language=language) for hypothesis in hypothesis_batch]
 
-         # Output shape: (b, embed_dim, max_len)
-        x_reshaped = padded_embeddings.permute(0, 2, 1)
+        padded_premise = torch.zeros(len(premise_embeds), max(e.size(0) for e in premise_embeds), self.dim).to(device)
+        for idx, embed in enumerate(premise_embeds):
+            padded_premise[idx, :embed.size(0)] = embed.to(device)
+        padded_hypothesis = torch.zeros(len(hypothesis_embeds), max(e.size(0) for e in hypothesis_embeds), self.dim).to(device)
+        for idx, embed in enumerate(hypothesis_embeds):
+            padded_hypothesis[idx, :embed.size(0)] = embed.to(device)
 
-        # output is 0, 1, or 2
-        conv_results = []
+        premise_reshaped = padded_premise.permute(0, 2, 1)
+        hypothesis_reshaped = padded_hypothesis.permute(0, 2, 1)
+
+        premise_results = []
+        hypothesis_results = []
         for conv in self.convs:
-            x = conv(x_reshaped)
+            x = conv(premise_reshaped)
             x = F.relu(x)
-            # x = x.squeeze(3)
-            y = F.max_pool1d(x, x.size(2)).squeeze(2)
-            conv_results.append(y)
+            x = F.max_pool1d(x, x.size(2)).squeeze(2)
+            premise_results.append(x)
 
-        z = torch.cat(conv_results, dim=1)
-        # x = self.connected_layer(self.drop(self.adaptive_max_pool(x)))
+        for conv in self.convs:
+            x = conv(hypothesis_reshaped)
+            x = F.relu(x)
+            x = F.max_pool1d(x, x.size(2)).squeeze(2)
+            hypothesis_results.append(x)
+
+
+        z1 = torch.cat(premise_results, dim=1)
+        z2 = torch.cat(hypothesis_results, dim=1)
+
+        z = torch.cat([z1, z2], dim=1)
         return self.connected_layer(self.drop(z))
 
-    def evaluate(self, sentence: str):
+    def evaluate(self, premise_batch: list[str], hypothesis_batch: list[str], language: str = "en"):
         self.eval()
         with torch.no_grad():
-            return self.forward([sentence])
+            return self.forward(premise_batch, hypothesis_batch, language=language)
 
 
-def main():
-    model = CNN()
-
+def train_model(model, loss_fn, optimizer):
     model.to(device)
-
-    loss_fn = nn.CrossEntropyLoss()
-    optimizer = optim.Adadelta(model.parameters(), lr=0.1, rho=0.95)
-
     print("Training...")
-    num_epochs = 15
-    total = len(train)
-    batch = []
+    num_epochs = 8
+    premise_batch = []
+    hypothesis_batch = []
     batch_labels = []
     batch_len = 32
+    batch_count = 0
 
+    train = pd.read_csv(TRAIN_SET)
+
+    val = pd.read_csv('./english/en_validation.csv')
 
     for epoch in range(num_epochs):
         idx = 0
+        train_shuffled = train.sample(frac=1).reset_index(drop=True)
         model.train()
-        for row in train.itertuples():
-            # access like row.label, row.premise, row.hypothesis
+
+        for row in train_shuffled.itertuples():
             label = row.label
-            # TODO tokenization method?
-            sentence = row.premise + " " + row.hypothesis
-
-            batch.append(sentence)
+            premise_batch.append(row.premise)
+            hypothesis_batch.append(row.hypothesis)
             batch_labels.append(label)
+            batch_count += 1
 
-            if len(batch) == batch_len:
+            if batch_count == batch_len:
 
                 optimizer.zero_grad()
-                pred = model.forward(batch)
+                pred = model.forward(premise_batch, hypothesis_batch)
                 loss = loss_fn(pred, torch.tensor(batch_labels, dtype=torch.long).to(device))
                 loss.backward()
                 optimizer.step()
 
-                batch = []
                 batch_labels = []
-                # print(f"[{epoch}] {idx}/{total}")
+                hypothesis_batch = []
+                premise_batch = []
+                batch_count = 0
                 
             idx += 1
 
@@ -136,39 +169,86 @@ def main():
         val_total = 0
         val_total_loss = 0.0
         val_correct = 0
-        print(f"Validation for epoch {epoch}")
+        print(f"\tValidation for epoch {epoch}")
         for row in val.itertuples():
-            # access like row.label, row.premise, row.hypothesis
             label = row.label
-            # TODO tokenization method?
-            sentence = row.premise + " " + row.hypothesis
-
-            pred = model.evaluate(sentence)
+            pred = model.evaluate([row.premise], [row.hypothesis])
             loss = loss_fn(pred, torch.tensor([label]).to(device))
             val_total_loss += loss.item()
             pred = pred.argmax(dim=1).item()
             val_correct += int(pred == label)
             val_total += 1
-        print(f"Total loss {val_total_loss} accuracy {val_correct / val_total}")
-            
-    print("Testing...")
+        print(f"\tTotal loss {val_total_loss} accuracy {val_correct / val_total}")
+
+def test_model(model, loss_fn, language):
     total_loss = 0.0
     num_correct = 0
     total = 0
+    all_preds = []
+    all_labels = []
+
+    model.to(device)
+    model.eval()
+    test = pd.read_csv(f'./{language}_test.csv')
     for row in test.itertuples():
         label = row.label
-        # TODO tokenization method?
-        sentence = row.premise + " " + row.hypothesis
-
-        pred = model.evaluate(sentence)
+        pred = model.evaluate([row.premise], [row.hypothesis], language)
         loss = loss_fn(pred, torch.tensor([label]).to(device))
         total_loss += loss.item()
         pred = pred.argmax(dim=1).item()
         num_correct += int(pred == label)
+        all_preds.append(pred)
+        all_labels.append(label)
         total += 1
     
-    print(f"TOTAL LOSS {total_loss}")
-    print(f"ACCURACY {num_correct / total}")
+    f1_macro = f1_score(all_labels, all_preds, average='macro')
+    f1_per_class = f1_score(all_labels, all_preds, average=None)
+
+    print(f"\tTotal loss {total_loss}")
+    print(f"\tAccuracy: {num_correct / total}")
+    print(f"\tF1 (macro): {f1_macro:.4f}")
+    print(f"\tF1 (per class): {f1_per_class}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="A script to train or evaluate a CNN for text classification")
+    parser.add_argument('--phase')
+    parser.add_argument('--language')
+    parser.add_argument('--path')
+    args = parser.parse_args()
+    phase = args.phase
+    language = args.language
+    pretrained_path = args.path
+
+
+    if phase == "train":
+        ft_en = KeyedVectors.load_word2vec_format('wiki.en.align.vec', binary=False, limit=200000)
+        model = CNN(ft_en)
+        loss_fn = nn.CrossEntropyLoss()
+        optimizer = optim.Adadelta(model.parameters(), lr=0.1, rho=0.95)
+        train_model(model, loss_fn, optimizer)
+        torch.save(model.state_dict(), pretrained_path)
+    elif phase == "test":
+        pretrained_state_dict = torch.load(pretrained_path, weights_only=True)
+        if language == "en":
+            ft_en = KeyedVectors.load_word2vec_format('wiki.en.align.vec', binary=False, limit=200000)
+            model = CNN(ft_en)
+            model.load_state_dict(pretrained_state_dict)
+            loss_fn = nn.CrossEntropyLoss()
+            test_model(model, loss_fn, "en")
+        elif language == "es":
+            ft_es = KeyedVectors.load_word2vec_format('wiki.es.align.vec', binary=False, limit=200000)
+            model = CNN(ft_es)
+            model.load_state_dict(pretrained_state_dict)
+            loss_fn = nn.CrossEntropyLoss()
+            test_model(model, loss_fn, "es")
+        elif language == "zh":
+            ft_zh = KeyedVectors.load_word2vec_format('wiki.zh.align.vec', binary=False, limit=200000)
+            model = CNN(ft_zh)
+            model.load_state_dict(pretrained_state_dict)
+            loss_fn = nn.CrossEntropyLoss()
+            test_model(model, loss_fn, "zh")
+        
 
 if __name__ == "__main__":
     main()
