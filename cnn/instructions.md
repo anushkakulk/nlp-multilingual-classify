@@ -9,42 +9,47 @@ Instructions:
 #### Training
 Example:
 ```
-python3 cnn_text_classifier.py --phase train --language en --path "./model_state-dict"
+python3 cnn_text_classifier.py --phase train --language en --path "./model_state_dict.pth"
 ```
-This will save the model state to a file called `model_state-dict` after training.
+This will save the model state to a file called `model_state_dict.pth` after training.
 
 #### Evaluation
 
-Usage example: this loads in the model from a file called `model_state-dict` before evaluating.
+Usage example: this loads in the model from a file called `model_state_dict.pth` before evaluating.
 ```
-(20:21:33) <0> [~/cs4120/final/nlp-multilingual-classify/cnn]
-dani@capyhacker (dm/cnn-initial-impl*+) 🧀❤️ 🐀 $ python3 cnn_text_classifier.py --phase test --language en --path "./model_state-dict"
+(00:34:34) <0> [~/cs4120/final/nlp-multilingual-classify/cnn]
+dani@capyhacker (dm/cnn-initial-impl*+) 🧀❤️ 🐀 $ python3 cnn_text_classifier.py --phase test --language en --path model_state_dict.pt
+/home/dani/.local/lib/python3.10/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
 There are 1 GPU(s) available.
 Device name: NVIDIA GeForce RTX 3070 Laptop GPU
-	Total loss 4593.350525464863
-	Accuracy: 0.5728542914171657
-	F1 (macro): 0.5739
-	F1 (per class): [0.54496403 0.54140127 0.63529412]
-(20:23:43) <0> [~/cs4120/final/nlp-multilingual-classify/cnn]
-dani@capyhacker (dm/cnn-initial-impl*+) 🧀❤️ 🐀 $ python3 cnn_text_classifier.py --phase test --language es --path "./model_state-dict"
+	Total loss 4522.697041166015
+	Accuracy: 0.5836327345309381
+	F1 (macro): 0.5854
+	F1 (per class): [0.5537618  0.56438356 0.63816003]
+dani@capyhacker (dm/cnn-initial-impl*+) 🧀❤️ 🐀 $ python3 cnn_text_classifier.py --phase test --language es --path model_state_dict.pth
+/home/dani/.local/lib/python3.10/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
 There are 1 GPU(s) available.
 Device name: NVIDIA GeForce RTX 3070 Laptop GPU
-	Total loss 5861.355050156417
-	Accuracy: 0.43832335329341315
-	F1 (macro): 0.4085
-	F1 (per class): [0.26672421 0.42861831 0.53006873]
-(20:26:07) <0> [~/cs4120/final/nlp-multilingual-classify/cnn]
-dani@capyhacker (dm/cnn-initial-impl*+) 🧀❤️ 🐀 $ python3 cnn_text_classifier.py --phase test --language zh --path "./model_state-dict"
+	Total loss 5875.207520765427
+	Accuracy: 0.475249500998004
+	F1 (macro): 0.4450
+	F1 (per class): [0.26435247 0.54240363 0.52809991]
+(00:39:13) <0> [~/cs4120/final/nlp-multilingual-classify/cnn]
+dani@capyhacker (dm/cnn-initial-impl*+) 🧀❤️ 🐀 $ python3 cnn_text_classifier.py --phase test --language zh --path model_state_dict.pth
+/home/dani/.local/lib/python3.10/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
 There are 1 GPU(s) available.
 Device name: NVIDIA GeForce RTX 3070 Laptop GPU
 Building prefix dict from the default dictionary ...
-Loading model from cache /tmp/jieba.cache
-Loading model cost 1.825 seconds.
+Dumping model to file cache /tmp/jieba.cache
+Loading model cost 0.830 seconds.
 Prefix dict has been built successfully.
-	Total loss 5485.861373245716
-	Accuracy: 0.3652694610778443
-	F1 (macro): 0.2891
-	F1 (per class): [0.29556289 0.07799443 0.49363405]
-(20:29:18) <0> [~/cs4120/final/nlp-multilingual-classify/cnn]
-dani@capyhacker (dm/cnn-initial-impl*+) 🧀❤️ 🐀 $ 
+	Total loss 5482.080330729485
+	Accuracy: 0.36227544910179643
+	F1 (macro): 0.3070
+	F1 (per class): [0.43670462 0.07254464 0.41184316]
+(00:41:14) <0> [~/cs4120/final/nlp-multilingual-classify/cnn]
+
 ```

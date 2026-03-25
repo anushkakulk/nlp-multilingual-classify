@@ -7,6 +7,8 @@ import torch.nn.functional as F
 import numpy as np
 import jieba
 import re
+import nltk
+from nltk.tokenize import word_tokenize
 import argparse
 from gensim.models import KeyedVectors
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
@@ -44,9 +46,9 @@ def tokenize_zh(text):
 
 def tokenize(sentence: str, language: str):
     if language == "en":
-        return sentence.strip('.').strip('!').strip('?').split(' ')
+        return word_tokenize(sentence)
     elif language == "es":
-        return sentence.strip('.').strip('!').strip('?').strip('¡').strip('¿').split(' ')
+        return word_tokenize(sentence)
     elif language == "zh":
         return tokenize_zh(sentence)
     else:
