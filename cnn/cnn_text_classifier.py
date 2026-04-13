@@ -15,6 +15,7 @@ from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
 
 
 TRAIN_SET='en_train.csv'
+LABEL_NAMES = ["Entailment", "Neutral", "Contradiction"]
 
 """
 Reference implementation:
@@ -206,10 +207,14 @@ def test_model(model, loss_fn, language):
     f1_macro = f1_score(all_labels, all_preds, average='macro')
     f1_per_class = f1_score(all_labels, all_preds, average=None)
 
+    acc = accuracy_score(all_labels, all_preds)
+    cm = confusion_matrix(all_labels, all_preds)
+
     print(f"\tTotal loss {total_loss}")
-    print(f"\tAccuracy: {num_correct / total}")
+    print(f"\tAccuracy: {acc:.4f}")
     print(f"\tF1 (macro): {f1_macro:.4f}")
     print(f"\tF1 (per class): {f1_per_class}")
+    print(pd.DataFrame(cm, index=LABEL_NAMES, columns=LABEL_NAMES))
 
 
 def main():
