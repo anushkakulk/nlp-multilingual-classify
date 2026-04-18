@@ -5,6 +5,8 @@ from nltk.corpus import stopwords
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import f1_score, accuracy_score
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import GridSearchCV, StratifiedKFold
 
 def combine_sentences(df):
     premise = df["premise"].fillna("")
@@ -16,34 +18,49 @@ def train(train_df):
     X_train = combine_sentences(train_df)
     y_train = train_df["label"].values
 
-    vectorizer = TfidfVectorizer(
+    pipe = Pipeline([
+        ("tfidf", TfidfVectorizer(
         min_df = 2, 
         ngram_range = (1,3),
-        max_features=200_000, 
         sublinear_tf=True
-    )
-
-    X_train = vectorizer.fit_transform(X_train)
-
-    lr_model = LogisticRegression(
+        )), 
+        ("lr", LogisticRegression(
         max_iter=2000,
         solver="saga",
         C = 1.0
+        ))
+    ])
+
+    param_grid = {
+        "tfidf__max_features": [50_000, 100_000, 200_000, 300_000]
+    }
+
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+    grid = GridSearchCV(
+        estimator=pipe, 
+        param_grid=param_grid, 
+        scoring="f1_macro",
+        cv=cv,
+        verbose=1,
     )
 
-    lr_model.fit(X_train, y_train)
+    grid.fit(X_train,y_train)
 
-    return vectorizer, lr_model
+    print("Best params:", grid.best_params_)
+    print("Best CV f1_macro", grid.best_score_)
 
-def evaluate_en(df, vectorizer, lr_model):
+    best_model = grid.best_estimator_
+
+    return best_model
+
+def evaluate_en(df, model):
     X_val = combine_sentences(df)
     y_val = df["label"].values
-    X_vect = vectorizer.transform(X_val)
-    pred_val = lr_model.predict(X_vect)
+    pred_values = model.predict(X_val)
 
-    print("English Accuracy:", accuracy_score(y_val, pred_val))
-    print("English F1-Score:", f1_score(y_val, pred_val, average="macro"))
-
+    print("English Accuracy:", accuracy_score(y_val, pred_values))
+    print("English F1-Score:", f1_score(y_val, pred_values, average="macro"))
 
 def main():
     parser = argparse.ArgumentParser(description="Train TF-IDF + LR on English NLI Data")
@@ -54,20 +71,18 @@ def main():
     args = parser.parse_args()
 
     train_df = pd.read_csv(args.train, on_bad_lines="skip", engine="python")
-    vectorizer, lr_model = train(train_df)
+    model = train(train_df)
     print("\n----TRAIN METRICS----")
-    evaluate_en(train_df, vectorizer, lr_model)
+    evaluate_en(train_df, model)
 
     if (args.val):
         val_df = pd.read_csv(args.val, on_bad_lines="skip", engine="python")
         print("\n----VALIDATION METRICS----")
-        evaluate_en(val_df, vectorizer, lr_model)
+        evaluate_en(val_df, model)
     
-    joblib.dump(vectorizer, args.vectorizer_output)
-    joblib.dump(lr_model, args.model_output)
+    joblib.dump(model, args.model_output)
 
     print(f"Model saved to: {args.model_output}")
-    print(f"Vectorizer saved to: {args.vectorizer_output}")
 
 if __name__ == "__main__":
     main()
