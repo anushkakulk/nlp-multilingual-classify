@@ -10,7 +10,9 @@ NUM_LABELS = 3
 MAX_LEN = 128
 LABEL_NAMES = ["Entailment", "Neutral", "Contradiction"]
 
-
+"""
+Utility class for representing the NLI dataset
+"""
 class NLIDataset(Dataset):
     def __init__(self, df, tokenizer):
         self.encodings = tokenizer(
@@ -34,6 +36,7 @@ class NLIDataset(Dataset):
         }
 
 
+# evaluate the model using the given dataloader and on the given device (GPU, CPU)
 def evaluate(model, loader, device):
     model.eval()
     all_preds, all_labels = [], []

@@ -23,11 +23,6 @@ LANGUAGE_NAMES = {
     "zh": "chinese"
 }
 
-"""
-Reference implementation:
-https://chriskhanhtran.github.io/posts/cnn-sentence-classification/
-
-"""
 
 if torch.cuda.is_available():       
     device = torch.device("cuda")
@@ -39,6 +34,9 @@ else:
     device = torch.device("cpu")
 
 
+"""
+Tokenizes Chinese text.
+"""
 def tokenize_zh(text):
     """Strip any existing spacing, then retokenize with MicroTokenizer for uniform Chinese text."""
     if not isinstance(text, str):
@@ -51,6 +49,9 @@ def tokenize_zh(text):
     return " ".join(tokens)
 
 
+"""
+Tokenizes a given string based on the language.
+"""
 def tokenize(sentence: str, language: str):
     if language == "en":
         return word_tokenize(sentence)
@@ -61,24 +62,32 @@ def tokenize(sentence: str, language: str):
     else:
         return []
     
-
+"""
+Implementation of CNN for Natural Language Inference.
+"""
 class CNN(nn.Module):
     def __init__(self, embeddings, dim: int = 300, num_classes: int = 3, num_filters: int = 100):
         super(CNN, self).__init__()
         self.word_embeddings = embeddings
+        # use three different filter widths for convolutions
         self.filter_sizes = [3, 4, 5]
         self.dim = dim
         self.num_filters = num_filters
         self.min_len = 5
         self.encoded_dim = num_filters * len(self.filter_sizes)
-        self.train_language = "en"
+        self.train_language = "en" # hard-coded because we don't train with any other languages for this experiment
 
+        # 1D-convolutional layers for each filter width
         self.convs = nn.ModuleList([
             nn.Conv1d(in_channels=self.dim, out_channels=num_filters, kernel_size=self.filter_sizes[i]) for i in range(len(self.filter_sizes))
         ])
         self.drop = nn.Dropout(0.5)
+        # NOTE: need to multiply encoded dim by 2 because premise and hypothesis are concatenated after embedding
         self.connected_layer = nn.Linear(in_features=self.encoded_dim * 2, out_features=num_classes)
 
+    """
+    Converts sentence to embedding based on language used.
+    """
     def embed_sentence(self, sentence: str, language: str):
         words = tokenize(sentence, language)
         embeddings = []
@@ -92,10 +101,15 @@ class CNN(nn.Module):
             embeddings.append(np.zeros(self.dim, dtype=np.float32))
         return torch.tensor(np.array(embeddings))
 
+    """
+    Takes in a batch of premise and hypothesis statements (must match by index) and returns the inferred
+    relationships between each.
+    """
     def forward(self, premise_batch: list[str], hypothesis_batch: list[str], language: str = "en"):
         premise_embeds = [self.embed_sentence(premise, language=language) for premise in premise_batch]
         hypothesis_embeds = [self.embed_sentence(hypothesis, language=language) for hypothesis in hypothesis_batch]
 
+        # first, pad each premise and hypothesis based on their respective embedding sizes
         padded_premise = torch.zeros(len(premise_embeds), max(e.size(0) for e in premise_embeds), self.dim).to(device)
         for idx, embed in enumerate(premise_embeds):
             padded_premise[idx, :embed.size(0)] = embed.to(device)
@@ -103,9 +117,11 @@ class CNN(nn.Module):
         for idx, embed in enumerate(hypothesis_embeds):
             padded_hypothesis[idx, :embed.size(0)] = embed.to(device)
 
+        # reshape to match input dimensions of convolutional layers
         premise_reshaped = padded_premise.permute(0, 2, 1)
         hypothesis_reshaped = padded_hypothesis.permute(0, 2, 1)
 
+        # apply convolutions and pooling to both premise and hypothesis
         premise_results = []
         hypothesis_results = []
         for conv in self.convs:
@@ -120,19 +136,22 @@ class CNN(nn.Module):
             x = F.max_pool1d(x, x.size(2)).squeeze(2)
             hypothesis_results.append(x)
 
-
+        # concatenate results, and then concatenate premise and hypothesis together before final prediction
         z1 = torch.cat(premise_results, dim=1)
         z2 = torch.cat(hypothesis_results, dim=1)
-
         z = torch.cat([z1, z2], dim=1)
         return self.connected_layer(self.drop(z))
 
+    """
+    Evaluates a given premise and hypothesis batch.
+    """
     def evaluate(self, premise_batch: list[str], hypothesis_batch: list[str], language: str = "en"):
         self.eval()
         with torch.no_grad():
             return self.forward(premise_batch, hypothesis_batch, language=language)
 
 
+# trains a model using the given loss function, optimizer, and path to the training data
 def train_model(model, loss_fn, optimizer, train_path):
     model.to(device)
     print("Training...")
@@ -148,6 +167,7 @@ def train_model(model, loss_fn, optimizer, train_path):
 
     for epoch in range(num_epochs):
         idx = 0
+        # shuffle data for better training results
         train_shuffled = train.sample(frac=1).reset_index(drop=True)
         model.train()
 
@@ -159,7 +179,6 @@ def train_model(model, loss_fn, optimizer, train_path):
             batch_count += 1
 
             if batch_count == batch_len:
-
                 optimizer.zero_grad()
                 pred = model.forward(premise_batch, hypothesis_batch)
                 loss = loss_fn(pred, torch.tensor(batch_labels, dtype=torch.long).to(device))
@@ -188,6 +207,7 @@ def train_model(model, loss_fn, optimizer, train_path):
             val_total += 1
         print(f"\tTotal loss {val_total_loss} accuracy {val_correct / val_total}")
 
+# evaluate trained model on given language, using given loss function
 def test_model(model, loss_fn, language):
     total_loss = 0.0
     num_correct = 0
@@ -256,6 +276,7 @@ def main():
         optimizer = optim.Adadelta(model.parameters(), lr=0.1, rho=0.95)
         train_model(model, loss_fn, optimizer, train_path)
         torch.save(model.state_dict(), pretrained_path)
+
     elif phase == "test":
         pretrained_state_dict = torch.load(pretrained_path, weights_only=True)
         if language == "en":

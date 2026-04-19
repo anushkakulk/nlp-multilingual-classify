@@ -8,12 +8,13 @@ from sklearn.metrics import f1_score, accuracy_score
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 
+# combines premise and hypothesis so that they can be fed into model as one sentence
 def combine_sentences(df):
     premise = df["premise"].fillna("")
     hypothesis = df["hypothesis"].fillna("")
     return (premise + " " + hypothesis).values
 
-
+# train the model using the given train dataframe
 def train(train_df):
     X_train = combine_sentences(train_df)
     y_train = train_df["label"].values
@@ -54,6 +55,7 @@ def train(train_df):
 
     return best_model
 
+# evaluate on the english language
 def evaluate_en(df, model):
     X_val = combine_sentences(df)
     y_val = df["label"].values

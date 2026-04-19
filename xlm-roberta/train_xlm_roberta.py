@@ -13,6 +13,9 @@ NUM_LABELS = 3
 MAX_LEN = 128
 
 
+"""
+Utility class for representing the NLI dataset
+"""
 class NLIDataset(Dataset):
     def __init__(self, df, tokenizer):
         self.encodings = tokenizer(
@@ -36,6 +39,7 @@ class NLIDataset(Dataset):
         }
 
 
+# evaluate the model using the given dataloader, on the given device (CPU, GPU)
 def evaluate(model, loader, device):
     model.eval()
     all_preds, all_labels = [], []
@@ -54,6 +58,8 @@ def evaluate(model, loader, device):
     return acc, f1
 
 
+# train the model using the given train/validation dataloaders, on the given device (CPU, GPU).
+# Runs for the given number of epochs, and uses the given learning rate in the optimizer.
 def train(model, train_loader, val_loader, device, epochs, lr):
     optimizer = AdamW(model.parameters(), lr=lr)
     total_steps = len(train_loader) * epochs

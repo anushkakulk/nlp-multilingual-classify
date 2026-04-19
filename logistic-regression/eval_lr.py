@@ -4,11 +4,13 @@ import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
 
+# concatenate premise and hypothesis in order to feed them into model as one combined string
 def combine_sentences(df):
     premise = df["premise"].fillna("")
     hypothesis = df["hypothesis"].fillna("")
     return (premise + " " + hypothesis).values
 
+# evaluate model on the given language and dataframe
 def evaluate(language, df, model): 
     X_combined = combine_sentences(df)
     y = df["label"].values
