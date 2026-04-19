@@ -2,21 +2,25 @@
 
 This folder contains the [XNLI (Cross-lingual Natural Language Inference) dataset](https://huggingface.co/datasets/facebook/xnli) used for training and evaluating cross-lingual transfer models.
 
+**Note:** In order to download the train data, you will need to use these links:
+1. [english train data](https://www.kaggle.com/datasets/thedevastator/xnli-multilingual-nli-dataset?resource=download&select=en_train.csv)
+2. [spanish train data](https://www.kaggle.com/datasets/thedevastator/xnli-multilingual-nli-dataset?resource=download&select=es_train.csv)
+3. [chinese train data](https://www.kaggle.com/datasets/thedevastator/xnli-multilingual-nli-dataset?resource=download&select=zh_train.csv)
+
+All of these files are too large to commit to the repo. See specific model sub-folders for instructions on where to download these files, and how to feed them to the model scripts.
+
 ## Folder Structure
 
 ```
 tokenize_chinese_text.py
 download_embeddings.py
 english/
-├── en_train.csv
 ├── en_test.csv
 └── en_validation.csv
 spanish/
-├── es_train.csv
 ├── es_test.csv
 └── es_validation.csv
 chinese/
-├── zh_train.csv
 ├── zh_test.csv
 └── zh_validation.csv
 embeddings/
@@ -25,7 +29,7 @@ embeddings/
 └── wiki.zh.align.top200000.vec
 
 ```
-
+(https://www.kaggle.com/datasets/thedevastator/xnli-multilingual-nli-dataset?resource=download&select=en_train.csv)
 ## File Format
 
 All CSV files contain the following columns:

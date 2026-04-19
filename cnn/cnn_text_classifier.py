@@ -15,7 +15,6 @@ from gensim.models import KeyedVectors
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
 
 
-ENGLISH_TRAIN_SET='en_train.csv'
 ENGLISH_VAL_SET='../data/english/en_validation.csv'
 LABEL_NAMES = ["Entailment", "Neutral", "Contradiction"]
 LANGUAGE_NAMES = {
@@ -134,7 +133,7 @@ class CNN(nn.Module):
             return self.forward(premise_batch, hypothesis_batch, language=language)
 
 
-def train_model(model, loss_fn, optimizer):
+def train_model(model, loss_fn, optimizer, train_path):
     model.to(device)
     print("Training...")
     num_epochs = 8
@@ -144,7 +143,7 @@ def train_model(model, loss_fn, optimizer):
     batch_len = 32
     batch_count = 0
 
-    train = pd.read_csv(ENGLISH_TRAIN_SET)
+    train = pd.read_csv(train_path)
     val = pd.read_csv(ENGLISH_VAL_SET)
 
     for epoch in range(num_epochs):
@@ -226,12 +225,14 @@ def test_model(model, loss_fn, language):
 def main():
     parser = argparse.ArgumentParser(description="A script to train or evaluate a CNN for text classification")
     parser.add_argument('--phase', required=True, help="Phase of model, either 'train' or 'test'")
+    parser.add_argument('--train_path', required=False, default='../data/en_train.csv', help="Path to english training data.")
     parser.add_argument("--embed_suffix", required=False, default='', help="Suffix of aligned embedding files. For example, for 'wiki.en.align.top200000.vec', pass in 'top200000.vec'. For wiki.en.align.vec, do not pass in this argument.")
     parser.add_argument('--language', required=False, default="en", help="Language to evaluate model on, used during 'test'. Either 'en' (English), 'es' (Spanish), or 'zh' (Chinese).")
     parser.add_argument('--model_path', required=False, default='model_trained.pth', help="Path to pre-trained model. Defaults to 'model_state_dict.pth'. Used during 'test'.")
     args = parser.parse_args()
     phase = args.phase
-    embed_suffix = '' if args.embed_suffix is None else args.embed_suffix
+    train_path = args.train_path
+    embed_suffix = args.embed_suffix
     language = args.language
     pretrained_path = args.model_path
 
@@ -241,15 +242,19 @@ def main():
             print("Must download English FastText aligned embeddings! See instructions in 'instructions.md'")
             exit(-1)
 
-        if not os.path.exists(ENGLISH_TRAIN_SET):
+        if not os.path.exists(train_path):
             print("Must download English training set! See instructions in 'instructions.md'")
+            exit(-1)
+
+        if not os.path.exists(train_path):
+            print("Must pass in a correct path for the english training data!")
             exit(-1)
 
         ft_en = KeyedVectors.load_word2vec_format(f'wiki.en.align.{embed_suffix}', binary=False, limit=200000)
         model = CNN(ft_en)
         loss_fn = nn.CrossEntropyLoss()
         optimizer = optim.Adadelta(model.parameters(), lr=0.1, rho=0.95)
-        train_model(model, loss_fn, optimizer)
+        train_model(model, loss_fn, optimizer, train_path)
         torch.save(model.state_dict(), pretrained_path)
     elif phase == "test":
         pretrained_state_dict = torch.load(pretrained_path, weights_only=True)
