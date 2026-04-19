@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import numpy as np
 import jieba
 import re
+import os
 import nltk
 from nltk.tokenize import word_tokenize
 import argparse
@@ -14,8 +15,14 @@ from gensim.models import KeyedVectors
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
 
 
-TRAIN_SET='en_train.csv'
+ENGLISH_TRAIN_SET='en_train.csv'
+ENGLISH_VAL_SET='../data/english/en_validation.csv'
 LABEL_NAMES = ["Entailment", "Neutral", "Contradiction"]
+LANGUAGE_NAMES = {
+    "en": "english",
+    "es": "spanish",
+    "zh": "chinese"
+}
 
 """
 Reference implementation:
@@ -137,9 +144,8 @@ def train_model(model, loss_fn, optimizer):
     batch_len = 32
     batch_count = 0
 
-    train = pd.read_csv(TRAIN_SET)
-
-    val = pd.read_csv('./english/en_validation.csv')
+    train = pd.read_csv(ENGLISH_TRAIN_SET)
+    val = pd.read_csv(ENGLISH_VAL_SET)
 
     for epoch in range(num_epochs):
         idx = 0
@@ -192,7 +198,7 @@ def test_model(model, loss_fn, language):
 
     model.to(device)
     model.eval()
-    test = pd.read_csv(f'./{language}_test.csv')
+    test = pd.read_csv(f'../data/{LANGUAGE_NAMES[language]}/{language}_test.csv')
     for row in test.itertuples():
         label = row.label
         pred = model.evaluate([row.premise], [row.hypothesis], language)
@@ -219,17 +225,27 @@ def test_model(model, loss_fn, language):
 
 def main():
     parser = argparse.ArgumentParser(description="A script to train or evaluate a CNN for text classification")
-    parser.add_argument('--phase')
-    parser.add_argument('--language')
-    parser.add_argument('--path')
+    parser.add_argument('--phase', required=True, help="Phase of model, either 'train' or 'test'")
+    parser.add_argument("--embed_suffix", required=False, default='', help="Suffix of aligned embedding files. For example, for 'wiki.en.align.top200000.vec', pass in 'top200000.vec'. For wiki.en.align.vec, do not pass in this argument.")
+    parser.add_argument('--language', required=False, default="en", help="Language to evaluate model on, used during 'test'. Either 'en' (English), 'es' (Spanish), or 'zh' (Chinese).")
+    parser.add_argument('--model_path', required=False, default='model_trained.pth', help="Path to pre-trained model. Defaults to 'model_state_dict.pth'. Used during 'test'.")
     args = parser.parse_args()
     phase = args.phase
+    embed_suffix = '' if args.embed_suffix is None else args.embed_suffix
     language = args.language
-    pretrained_path = args.path
+    pretrained_path = args.model_path
 
 
     if phase == "train":
-        ft_en = KeyedVectors.load_word2vec_format('wiki.en.align.vec', binary=False, limit=200000)
+        if not os.path.exists(f'wiki.en.align.{embed_suffix}'):
+            print("Must download English FastText aligned embeddings! See instructions in 'instructions.md'")
+            exit(-1)
+
+        if not os.path.exists(ENGLISH_TRAIN_SET):
+            print("Must download English training set! See instructions in 'instructions.md'")
+            exit(-1)
+
+        ft_en = KeyedVectors.load_word2vec_format(f'wiki.en.align.{embed_suffix}', binary=False, limit=200000)
         model = CNN(ft_en)
         loss_fn = nn.CrossEntropyLoss()
         optimizer = optim.Adadelta(model.parameters(), lr=0.1, rho=0.95)
@@ -238,19 +254,28 @@ def main():
     elif phase == "test":
         pretrained_state_dict = torch.load(pretrained_path, weights_only=True)
         if language == "en":
-            ft_en = KeyedVectors.load_word2vec_format('wiki.en.align.vec', binary=False, limit=200000)
+            if not os.path.exists(f'wiki.en.align.{embed_suffix}'):
+                print("Must download English FastText aligned embeddings! See instructions in 'instructions.md'")
+                exit(-1)
+            ft_en = KeyedVectors.load_word2vec_format(f'wiki.en.align.{embed_suffix}', binary=False, limit=200000)
             model = CNN(ft_en)
             model.load_state_dict(pretrained_state_dict)
             loss_fn = nn.CrossEntropyLoss()
             test_model(model, loss_fn, "en")
         elif language == "es":
-            ft_es = KeyedVectors.load_word2vec_format('wiki.es.align.vec', binary=False, limit=200000)
+            if not os.path.exists(f'wiki.es.align.{embed_suffix}'):
+                print("Must download Spanish FastText aligned embeddings! See instructions in 'instructions.md'")
+                exit(-1)
+            ft_es = KeyedVectors.load_word2vec_format(f'wiki.es.align.{embed_suffix}', binary=False, limit=200000)
             model = CNN(ft_es)
             model.load_state_dict(pretrained_state_dict)
             loss_fn = nn.CrossEntropyLoss()
             test_model(model, loss_fn, "es")
         elif language == "zh":
-            ft_zh = KeyedVectors.load_word2vec_format('wiki.zh.align.vec', binary=False, limit=200000)
+            if not os.path.exists(f'wiki.zh.align.{embed_suffix}'):
+                print("Must download Chinese FastText aligned embeddings! See instructions in 'instructions.md'")
+                exit(-1)
+            ft_zh = KeyedVectors.load_word2vec_format(f'wiki.zh.align.{embed_suffix}', binary=False, limit=200000)
             model = CNN(ft_zh)
             model.load_state_dict(pretrained_state_dict)
             loss_fn = nn.CrossEntropyLoss()

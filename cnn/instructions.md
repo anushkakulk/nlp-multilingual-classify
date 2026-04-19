@@ -5,11 +5,36 @@ Instructions:
 2. download the english training set from [here](https://www.kaggle.com/datasets/thedevastator/xnli-multilingual-nli-dataset?resource=download&select=en_train.csv). Now there should be a file called `en_train.csv'` in this directory as well.
 3. train the model
 4. evaluate the model
+**Note**: report performance achieved with 'model_state_dict.pth', which is included here. It also required the use of full FastText aligned embeddings, not just the top 200,000. However, results were quite similar when using the pre-trained model state dict on the top 200,000 FastText embeddings when compared to the full embeddings.
+
+**Note**: With the top 200,000 english embeddings and a laptop with a GeForce 3070, the training phase took ~20 minutes.
+
+  
+For example, from this directory:
+```
+# 1. get top200000 embeddings. Note that the performance in the paper was achieved with all embeddings, not just the top 200,000 per language.
+  
+$ python3 ../data/download_embeddings.py --out_dir ./
+
+# 2. download the english training set
+# Navigate to the site, and download en_train.csv
+# Then, move the resulting .zip here and unzip
+$ mv ~/Downloads/en_train.csv.zip
+$ unzip en_train.csv.zip
+
+# 3. run the script to train the model
+$ python3 cnn_text_classifier.py --phase train --embed_suffix top200000.vec --model_path model_trained.pth
+
+# 4. Evaluate
+# Uses included pre-trained dict
+$ python3 cnn_text_classifier.py --phase test --language es --embed_suffix top200000.vec
+
+```
 
 #### Training
 Example:
 ```
-python3 cnn_text_classifier.py --phase train --language en --path "./model_state_dict.pth"
+python3 cnn_text_classifier.py --phase train --language en --model_path "./model_state_dict.pth"
 ```
 This will save the model state to a file called `model_state_dict.pth` after training.
 
@@ -19,7 +44,7 @@ Usage example: this loads in the model from a file called `model_state_dict.pth`
   
 English:
 ```
-$ python3 cnn_text_classifier.py --phase train --language en --path^C./model_state_dict.pth"
+$ python3 cnn_text_classifier.py --phase train --language en --model_path^C./model_state_dict.pth"
   
 There are 1 GPU(s) available.
 Device name: NVIDIA GeForce RTX 3070 Laptop GPU
@@ -36,7 +61,7 @@ Contradiction         267      418            985
   
 Spanish:
 ```
-$ python3 cnn_text_classifier.py --phase test --language es --path ./model_state_dict.pth
+$ python3 cnn_text_classifier.py --phase test --language es --model_path ./model_state_dict.pth
   
 There are 1 GPU(s) available.
 Device name: NVIDIA GeForce RTX 3070 Laptop GPU
@@ -52,7 +77,7 @@ Contradiction         142      640            888
   
 Chinese:
 ```
-$ python3 cnn_text_classifier.py --phase test --language zh --path ./model_state_dict.pth 
+$ python3 cnn_text_classifier.py --phase test --language zh --model_path ./model_state_dict.pth 
   
 There are 1 GPU(s) available.
 Device name: NVIDIA GeForce RTX 3070 Laptop GPU
