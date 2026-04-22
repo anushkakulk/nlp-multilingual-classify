@@ -6,6 +6,14 @@ Instructions:
 3. train the model
 4. evaluate the model  
 
+Dependencies:
+- pandas (`pip install pandas`)
+- jieba (`pip install jieba`)
+- nltk (`pip install nltk`)
+- gensim (`pip install gensim`)
+- scikit-learn / sklearn (`pip install scikit-learn`)
+- pytorch (`pip install torch`)
+
 **Note**: report performance was achieved with 'model_state_dict.pth', which is included here. It also required the use of full FastText aligned embeddings, not just the top 200,000. However, results were quite similar when using the pre-trained model state dict on the top 200,000 FastText embeddings when compared to the full embeddings.
 
 **Note**: With the top 200,000 english embeddings and a laptop with a GeForce 3070, the training phase took ~20 minutes.
